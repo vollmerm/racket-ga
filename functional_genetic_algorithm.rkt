@@ -57,6 +57,49 @@
 (define (random-index limit)
   (inexact->exact (round (* (- limit 1) (random)))))
 
+(define (fold-left-with-index func accum lst index)
+  ; for the griewank function, I need to find the sum and product over a list taking into account
+  ; the index of the element in the list
+  (if (null? lst) accum
+      (fold-left-with-index func
+                            (func accum (car lst) index)
+                            (cdr lst)
+                            (+ index 1))))
+
+; the evaluation function is the function that decides what problem the genetic algorithm is
+; trying to solve. it's how the relative fitness of different individuals is computed.
+(define (evaluate value-list)
+  ; computes the griewank function
+  (let ((value-list (convrange value-list)))
+    (fl- (fold-left-with-index 
+          (lambda (acc item index) (fl+ acc (fl/ (fl* item item) 4000.0))) 1.0 value-list 1)
+         (fold-left-with-index 
+          (lambda (acc item index) (fl* acc (cos (fl/ item (sqrt (->fl index)))))) 1.0 value-list 1))))
+
+; decode takes a bit string and decodes it into a floating point number
+(define (decode str)
+  ; str is a vector
+  (letrec ((sum-str (lambda (str i) (if (= i -1) 0
+                                        (+ (* (vector-ref str i) (expt 2.0 (- +gene+ 1 i)))
+                                           (sum-str str (- i 1))))))
+           (split-vectors (lambda (i) (if (= i 0) '()
+                                          (cons (vector-copy str (- i +gene+) i)
+                                                (split-vectors (- i +gene+)))))))
+    (map (lambda (str) (sum-str str (- (vector-length str) 1))) (split-vectors (vector-length str)))))
+
+; convrange takes a number and converts it into the proper range for evaluate
+(define (convrange raw)
+  ; in the case of this problem (range -512 to 512), all that's needed to convert the range
+  ; is subtracting 512. in most problems this function would also need multiplication and division
+  (map (lambda (i)
+         (fl- (exact->inexact i) 512.0)) raw))
+
+(define (elite pool best)
+  ; take the best individual so far and add it to the pool
+  (if +elite+
+      (cons best (cdr (shuffle pool)))
+      pool))
+
 ; these helper functions are for the tournament selection
 ; the code was getting long and complicated so I pulled out sections
 ; that were often repeated. the "a b c d" in the parameters is to make
@@ -165,6 +208,7 @@
         (crossover-compute vector-pool updated-new-pool rest-of-selected))))
 
 (define (crossover pool selected)
+  ; calls crossover with a vector pool
   (crossover-compute (list->vector pool) '() selected))
 
 (define (invert-gene string)
@@ -187,45 +231,6 @@
                                                     (individual-string indv))))
                                (individual (decode str) (invert-gene str) (evaluate (decode str)))))))
     (map mutate-individual pool)))
-
-(define (decode str)
-  ; str is a vector
-  (letrec ((sum-str (lambda (str i) (if (= i -1) 0
-                                        (+ (* (vector-ref str i) (expt 2.0 (- +gene+ 1 i)))
-                                           (sum-str str (- i 1))))))
-           (split-vectors (lambda (i) (if (= i 0) '()
-                                          (cons (vector-copy str (- i +gene+) i)
-                                                (split-vectors (- i +gene+)))))))
-    (map (lambda (str) (sum-str str (- (vector-length str) 1))) (split-vectors (vector-length str)))))
-
-(define (convrange raw)
-  ; in the case of this problem (range -512 to 512), all that's needed to convert the range
-  ; is subtracting 512. in most problems this function would also need multiplication and division
-  (map (lambda (i)
-         (fl- (exact->inexact i) 512.0)) raw))
-
-(define (fold-left-with-index func accum lst index)
-  ; for the griewank function, I need to find the sum and product over a list taking into account
-  ; the index of the element in the list
-  (if (null? lst) accum
-      (fold-left-with-index func
-                            (func accum (car lst) index)
-                            (cdr lst)
-                            (+ index 1))))
-
-(define (evaluate value-list)
-  ; this computes the griewank function
-  (let ((value-list (convrange value-list)))
-    (fl- (fold-left-with-index 
-          (lambda (acc item index) (fl+ acc (fl/ (fl* item item) 4000.0))) 1.0 value-list 1)
-         (fold-left-with-index 
-          (lambda (acc item index) (fl* acc (cos (fl/ item (sqrt (->fl index)))))) 1.0 value-list 1))))
-
-(define (elite pool best)
-  ; take the best individual so far and add it to the pool
-  (if +elite+
-      (cons best (cdr (shuffle pool)))
-      pool))
 
 (define (step pop i)
   ; execute one generation
