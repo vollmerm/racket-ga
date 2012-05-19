@@ -21,6 +21,8 @@
 ;   1 +   sum over all x[i]: (x[i]^2 / 4000)
 ;   minus product over all x[i]: (cos (x[i]/sqrt(i))
 ;
+; The individuals in the population are bit strings representing numbers between -512.0 and +512.0
+;
 ; To run it, use the run function, (run n i p), where:
 ;   n is the number of generations per cycle (between population crossovers)
 ;   i is the number of cycles
@@ -179,6 +181,7 @@
                        (vector-drop string (+ split-start +gene+))))))
 
 (define (mutation pool chance)
+  ; randomly mutate parts of a bit string
   (let ((mutate-individual (lambda (indv)
                              (let ((str (vector-map (lambda (i) (if (= (flip chance) 1) (- 1 i) i))
                                                     (individual-string indv))))
@@ -201,19 +204,22 @@
   (map (lambda (i)
          (fl- (exact->inexact i) 512.0)) raw))
 
+(define (fold-left-with-index func accum lst index)
+  ; for the griewank function, I need to find the sum and product over a list taking into account
+  ; the index of the element in the list
+  (if (null? lst) accum
+      (fold-left-with-index func
+                            (func accum (car lst) index)
+                            (cdr lst)
+                            (+ index 1))))
+
 (define (evaluate value-list)
-  ; this is the function that determines the fitness
-  ; I'm not happy with it right now. it needs to see the index of the number in its list, which is not
-  ; provided by foldl, so I'm looking it up separately (in an inefficient way). there's also a potential
-  ; problem with a number being in the list twice. this function needs to be re-written.
+  ; this computes the griewank function
   (let ((value-list (convrange value-list)))
-    (letrec ((find-in-list (lambda (i lst item)
-                             (cond ((null? lst) -1)
-                                   ((eq? (car lst) item) i)
-                                   (#t (find-in-list (+ i 1) (cdr lst) item))))))
-      (fl- (foldl (lambda (i s) (fl+ s (fl/ (fl* i i) 4000.0))) 1.0 value-list)
-           (foldl (lambda (i s) (fl* s (cos (fl/ i (sqrt (fl+ 1.0 (find-in-list 0.0 value-list i))))))) 
-                  1.0 value-list)))))
+    (fl- (fold-left-with-index 
+          (lambda (acc item index) (fl+ acc (fl/ (fl* item item) 4000.0))) 1.0 value-list 1)
+         (fold-left-with-index 
+          (lambda (acc item index) (fl* acc (cos (fl/ item (sqrt (->fl index)))))) 1.0 value-list 1))))
 
 (define (elite pool best)
   ; take the best individual so far and add it to the pool
