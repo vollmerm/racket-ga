@@ -23,11 +23,13 @@
 ;
 ; The individuals in the population are bit strings representing numbers between -512.0 and +512.0
 ;
-; To run it, use the run function, (run n i p), where:
+; To run it, use the run function, (run n i p size length mutation), where:
 ;   n is the number of generations per cycle (between population crossovers)
 ;   i is the number of cycles
 ;   p is the number of populations (and number of threads to spawn)
-;
+;   size is the size of each population
+;   length is the number of chromosomes
+;   mutation is the mutation rate, between 0 and 1
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
@@ -36,9 +38,8 @@
 
 (provide run) ; export the run function, which runs the rest of the program
 
-(define +population-size+ 20) ; number of individuals in the population
-(define +chrom-length+ 100) ; number of chromosomes (bits in bitstring)
-(define +pmut+ 0.05) ; probability of mutation
+; I need to change the program to get rid of these constants
+; likely have them passed in somehow
 (define +elite+ #t) ; turn elitism on or off
 (define +maxmin+ -1) ; -1 for minimizing, 1 for maximizing fitness
 (define +gene+ 10) ; length of gene
@@ -232,25 +233,20 @@
                                (individual (decode str) (invert-gene str) (evaluate (decode str)))))))
     (map mutate-individual pool)))
 
-(define (step pop i)
+(define (step pop i mut)
   ; execute one generation
   (let ((pool (population-pool pop))
         (best (population-best pop)))
     (if (= i 0) pop
         ; I'm using let* again to make the flow of data easier to read
-        (let* ((temp-pool (mutation (crossover pool (tournament pool)) +pmut+))
+        (let* ((temp-pool (mutation (crossover pool (tournament pool)) mut))
                (gen-best (get-best-individual pool))
                (best-individual (better-fit-individual best gen-best))
                (new-pool (elite temp-pool best-individual)))
-          (step (population new-pool best-individual) (- i 1))))))
+          (step (population new-pool best-individual) (- i 1) mut)))))
 
 (define initial-best-fitness
   (if (= +maxmin+ -1) 999999 -999999))
-
-(define initial-best-individual
-  (individual 0 (make-vector +population-size+) initial-best-fitness))
-
-(define initial-pool (initialize-population-pool +population-size+ +chrom-length+))
 
 ; the next few functions allow the individuals to migrate between populations
 ; this is done by recursing down the population list, taking one individual from each,
@@ -272,13 +268,13 @@
 (define (do-cross pop-list)
   (cross-populations pop-list (create-cross-population-list pop-list)))
 
-(define (setup-population)
-  (population (initialize-population-pool +population-size+ +chrom-length+)
-              initial-best-individual))
+(define (setup-population size length)
+  (population (initialize-population-pool size length)
+              (individual '() '() initial-best-fitness)))
 
-(define (build-pop-list n)
+(define (build-pop-list n size length)
   (let ((range (build-list n values)))
-    (map (lambda (i) (setup-population)) range)))
+    (map (lambda (i) (setup-population size length)) range)))
 
 ; Racket doesn't let ordinary structs go in messages to places. I'm sure it has a good reason
 ; for that limitation. in my case, the structs are purely immutable (like everything in the program)
@@ -300,28 +296,28 @@
 ; this code constructs and uses the places
 ; the syntax is still new to me so I'm mimicing the code structure found in Racket's documentation
 
-(define (make-process-place pop n)
+(define (make-process-place pop n mutation)
   (define p
     (place ch
            (define initial (place-channel-get ch))
-           (define new-pop (step (vector->population (car initial)) (cdr initial)))
+           (define new-pop (step (vector->population (car initial)) (cadr initial) (caddr initial)))
            (place-channel-put ch (population->vector new-pop))))
-  (place-channel-put p (cons (population->vector pop) n)) p)
+  (place-channel-put p (list (population->vector pop) n mutation)) p)
 
-(define (run-process-place pop-list n)
-  (let ((place-list (map (lambda (pop) (make-process-place pop n)) pop-list)))
+(define (run-process-place pop-list n mutation)
+  (let ((place-list (map (lambda (pop) (make-process-place pop n mutation)) pop-list)))
     (define result (map (lambda (p) (vector->population (place-channel-get p))) place-list))
     (map place-kill place-list)
     result))
 
-(define (cycle n i pop-list)
+(define (cycle n i pop-list mutation)
   ; n is number of cycles between crossover
   ; i is number of crossovers
   (if (= i 0) pop-list
-      (let ((cross (do-cross (run-process-place pop-list n))))
+      (let ((cross (do-cross (run-process-place pop-list n mutation))))
         (display "Cycles left: ")(display i)(newline)
         (print-population-best (find-best pop-list))
-        (cycle n (- i 1) cross))))
+        (cycle n (- i 1) cross mutation))))
 
 (define (find-best pop-list)
   (argmax (lambda (pop) (* +maxmin+ (individual-fitness (population-best pop)))) pop-list))
@@ -334,14 +330,17 @@
     (display "Best fitness: ")(display (individual-fitness best))(newline)
     (display (individual-string best))(newline)))
 
-(define (run n i p)
+(define (run n i p size length mutation)
   ; this is the end! just one function to put it all together.
   ; n is the number of generations per cycle (between population crossovers)
   ; i is the number of cycles
   ; p is the number of populations (and number of threads to spawn)
+  ; size is the size of each population
+  ; length is the number of chromosomes
+  ; mutation is the mutation rate, between 0 and 1
   (display "Simple Parallel Genetic Algorithm in Racket")(newline)
   (display "Mike Vollmer, 2012")(newline)(newline)
-  (let* ((result (cycle n i (build-pop-list p)))
+  (let* ((result (cycle n i (build-pop-list p size length) mutation))
          (best (find-best result)))
     (print-pop-list result)
     (newline)(display "* Most fit *")(newline)

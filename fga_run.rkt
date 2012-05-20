@@ -8,4 +8,4 @@
 
 (require "functional_genetic_algorithm.rkt")
 
-(run 100 100 8) ; 100 generations per cycle, 100 generations, 8 populations
+(run 100 100 8 20 100 0.05) ; 100 generations per cycle, 100 generations, 8 populations
