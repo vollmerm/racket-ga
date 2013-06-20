@@ -1,7 +1,7 @@
 racket-ga
 =========
 
-This is a parallel genetic algorithm implementation in Racket Scheme. It is written in a functional style and uses elitism, inversion, and subpopulations.
+This is a parallel genetic algorithm implementation in [Racket Scheme](http://racket-lang.org/), using [Places](http://docs.racket-lang.org/reference/places.html) for parallelism. It is written in a functional style and uses elitism, inversion, and subpopulations.
 
 Usage
 -----
@@ -16,14 +16,19 @@ To use this module in your own code, it must be require'd.
 (require "population.rkt")
 ```
 
+If you want to use the multi-process parallel features, do this instead:
+
+```scheme
+(require "population.rkt")
+(require "parallel-population.rkt")
+```
+
 After that, there are two search procedures exposed. One is run-population, which runs a search with a single population. The other is run-parallel-population, which runs several populations separately and crosses over between them. 
 
 Here's a simple example of invoking the search (taken from sinbowl.rkt):
 
 ```scheme
-(run-parallel-population
- #:parallel-populations 5
- #:parallel-cycles 5
+(run-population
  #:iterations 10
  #:population-size 50
  #:chromosome-length 30
@@ -35,9 +40,11 @@ Here's a simple example of invoking the search (taken from sinbowl.rkt):
  #:range-offset 60.0)
 ```
 
-The above code starts a search with 5 parallel populations, 10 iterations per cycle (meaning generations that occur between the crossovers from one population to another), 5 cycles (meaning the number of times individuals cross over between populations), a population size of 50, a chromosome length of 30 bits, a gene size of 30, maxmin set to -1 (1 for maximize, -1 for minimize), and a range between -60 and +60.
+The above code starts a search with 10 iterations, a population size of 50, a chromosome length of 30 bits, a gene size of 30, maxmin set to -1 (1 for maximize, -1 for minimize), and a range between -60 and +60.
 
-report and evaluate are functions. The report function takes two parameters: an index (between 0 and the iteration limit), and the best value found so far. The evaluate function takes a list of values as a parameter, each corresponding to a gene.
+_report_ and _evaluate_ are quoted lists representing functions. Because they will need to be passed between Racket processes, they cannot be closures, so I picked the next-best approach and just eval the code in each process to define the function. If this bothers you, or if you want to do something more significant that you can't do with the ordinary base environment, you can add your evaluation functions directly to population.rkt or parallel-population.rkt.
+
+The report function takes two parameters: an index (between 0 and the iteration limit), and the best value found so far. The evaluate function takes a list of values as a parameter, each corresponding to a gene.
 
 There are some other subtleties to the parameter list:
 
@@ -52,13 +59,15 @@ There are other optional parameters:
 
 maxmin, range-size, and range-offset are also optional. They default to 1, 1024.0, and 512.0 respectively.
 
+For an example of run-parallel-population, look at sinbowl.rkt. Note that the parallel search is still experimental and not properly tested.
+
 ### Structures
 
 To use the module you'll likely need to interact with the structs defined in it. Luckily there are only two you'll need to use, and they're very simple.
 
 ```scheme
-(struct individual (value string fitness)) ; structure for each individual
-(struct population (pool best)) ; whole population
+(struct individual (value string fitness) #:prefab) ; structure for each individual
+(struct population (pool best) #:prefab) ; whole population
 ```
 
 run-population returns a population structure, while run-parallel-population returns a list of them. The pool in the population structs is a list of individuals.
@@ -76,14 +85,6 @@ The "fitness" field of struct "individual" is accessed with "individual-fitness"
 
 Misc
 ----
-
-### Limitations
-
-run-parallel-population currently does not take advantage of hardware parallelism (meaning, the populations run in parallel metaphorically, but as far as your cpu is concerned they're all in the same thread). If you absolutely need true parallelism, you can use Racket's places, having each place call run-population (calls to run-population and run-parallel-population are restartable/resumable). This is fairly easy to do if you use population.rkt as a reference. 
-
-I wasn't able to do that automatically because of the nature of places in Racket, and how I designed the API. Another program using racket-ga can submit an evaluation function, but evaluation functions cannot be sent to places, and places are only closed over top-level definitions that are set before the code is run. 
-
-However, it's certainly possible to write your own code to create the places and have them call run-population repeatedly, given your evaluation and report functions are defined at the top level of your module. If you want, you can look up the initial committed code of this repository to see an example of how I did it.
 
 ### Sources
 

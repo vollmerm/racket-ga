@@ -3,7 +3,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;
 ; population.rkt
-; Mike Vollmer, 2012
+; Mike Vollmer, 2013
 ;
 ; Tested in Racket 5.3.4 x84_64.
 ;
@@ -11,13 +11,12 @@
 ;
 ; This file is intended to be used as a module. Include it using (require "population.rkt").
 ;
-; There are two ways to invoke this program. One is with run-population and one is with run-parallel-population.
-; For a more complete explanation see the README, but essentially the difference is run-population only runs a
-; single population while run-parallel-population runs several. 
+; You can run the genetic algorithm with the 'run-population function. It takes keyword parameters, some of which
+; are optional and have default values. For a more complete explanation of the parameters, either consult the
+; README or read the source code below.
 ;
-; The arguments to both of the main functions use keywords, so they can be specified in any order. Some of the
-; parameters are optional. Because pool and best-individual are optional keywords, it's possible to resume
-; a search with a given pool and best-found individual.
+; In particular, note that the #:pool and #:best-individual keyword parameters are optional, so it is possible
+; to resume a search by passing in values for those parameters.
 ;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -25,8 +24,12 @@
 
 (provide run-population flip (struct-out individual) (struct-out population))
 
-(struct individual (value string fitness)) ; structure for each individual
-(struct population (pool best)) ; whole population
+(struct individual (value string fitness) #:prefab) ; structure for each individual
+(struct population (pool best) #:prefab) ; whole population
+
+
+
+;(define (individual value string fitness) (list 'individual value stirng fitness))
 
 ; some helper functions for operations needing randomness
 (define (flip prob) (if (< (random) prob) 1 0))
@@ -47,13 +50,14 @@
          #:gene-size gene
          #:elite [elite-on #t]
          #:inversion-rate [inversion-rate 0.01]
-         #:evaluation evaluate
-         #:report [report-function '()]
+         #:evaluation evaluate-code
+         #:report [report-code '(lambda (i value) ())]
          #:maxmin [maxmin 1]
          #:range-size [range-size 1024.0]
          #:range-offset [range-offset 512.0]
          #:criteria [criteria '()])
-  
+  (define evaluate (eval evaluate-code (make-base-namespace)))
+  (define report-function (eval report-code (make-base-namespace)))
   ; decode takes a bit string and decodes it into numbers (returns a list of flonums)
   (define (decode str)
     ; str is a vector
