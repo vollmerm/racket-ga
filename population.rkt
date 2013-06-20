@@ -52,7 +52,7 @@
          #:maxmin [maxmin 1]
          #:range-size [range-size 1024.0]
          #:range-offset [range-offset 512.0]
-         #:criteria [criteria 0.05])
+         #:criteria [criteria '()])
   
   ; decode takes a bit string and decodes it into numbers (returns a list of flonums)
   (define (decode str)
@@ -235,74 +235,8 @@
                    (gen-best (get-best-individual pool))
                    (best-individual (better-fit-individual best gen-best))
                    (new-pool (elite temp-pool best-individual)))
-              (if (< (abs (individual-fitness best-individual)) criteria) 
+              (if (and (number? criteria) (< (abs (individual-fitness best-individual)) criteria))
                   (population pool best)
                   (step new-pool best-individual (- i 1)))))))
   
   (step pool best iterations))
-
-; the next few functions allow the individuals to migrate between populations
-; this is done by recursing down the population list, taking one individual from each,
-; shuffling that list of individuals, and recursing down the population list again
-; merging the individuals back in (in random order)
-
-(provide run-parallel-population)
-
-(define (create-cross-population-list pop-list)
-  (shuffle (map (lambda (pop) (car (population-pool pop))) pop-list)))
-
-(define (cross-populations pop-list cross-list)
-  (if (null? pop-list) '()
-      (let ((cross (lambda (pop indv) 
-                     (population 
-                      (shuffle (cons indv (cdr (population-pool pop))))
-                      (population-best pop)))))
-        (cons (cross (car pop-list) (car cross-list))
-              (cross-populations (cdr pop-list) (cdr cross-list))))))
-
-(define (build-pop-list n)
-  (build-list n (lambda (i) (population '() '()))))
-
-(define (do-cross pop-list)
-  (cross-populations pop-list (create-cross-population-list pop-list)))
-
-(define (run-parallel-population
-         #:parallel-populations parallel-count
-         #:parallel-cycles cycles
-         #:pool [pool '()]
-         #:best-individual [best '()]
-         #:iterations iterations
-         #:population-size population-size
-         #:chromosome-length chromosome-length
-         #:mutation-rate [mutation-rate 0.05]
-         #:gene-size gene
-         #:elite [elite-on #t]
-         #:inversion-rate [inversion-rate 0.01]
-         #:evaluation evaluate
-         #:report [report-function '()]
-         #:maxmin [maxmin 1]
-         #:range-size [range-size 1024.0]
-         #:range-offset [range-offset 512.0]
-         #:criteria [criteria 0.05])
-  (letrec ((parallel-cycle 
-            (lambda (i pop-list) (if (= i 0) pop-list
-                                     (parallel-cycle (- i 1)
-                                                     (do-cross (map (lambda (pop)
-                                                                      (run-population
-                                                                       #:pool (population-pool pop)
-                                                                       #:best-individual (population-best pop)
-                                                                       #:iterations iterations
-                                                                       #:population-size population-size
-                                                                       #:chromosome-length chromosome-length
-                                                                       #:mutation-rate mutation-rate
-                                                                       #:gene-size gene
-                                                                       #:elite elite-on
-                                                                       #:inversion-rate inversion-rate
-                                                                       #:evaluation evaluate
-                                                                       #:report report-function
-                                                                       #:maxmin maxmin
-                                                                       #:range-size range-size
-                                                                       #:range-offset range-offset
-                                                                       #:criteria criteria))
-                                                                    pop-list)))))))
-    (parallel-cycle cycles (build-pop-list parallel-count))))

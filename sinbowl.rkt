@@ -12,17 +12,19 @@
 ;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-
-(require racket/flonum)
 (require "population.rkt")
+(require "parallel-population.rkt")
 
 (display "racket-ga example")(newline)
 (display "Minimixing sinbowl function")(newline)(newline)
 
-(define (sinbowl value)
-  (fl- (fl* (flabs (exact->inexact value)) 0.1) (sin (exact->inexact value))))
+;(define (evaluate lst) 
+;  (let ((sinbowl (lambda (value) (- (* (abs value) 0.1) (sin value)))))
+;    (sinbowl (car lst))))
 
-(define (evaluate lst) (sinbowl (car lst)))
+(define evaluate
+  '(lambda (lst) (let ((sinbowl (lambda (value) (- (* (abs value) 0.1) (sin value)))))
+    (sinbowl (car lst)))))
 
 (define (report i value)
   (if (= (modulo i 50) 0)
