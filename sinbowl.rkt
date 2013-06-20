@@ -31,7 +31,7 @@
 (define pop-list (run-parallel-population
                   #:parallel-populations 5
                   #:parallel-cycles 5
-                  #:iterations 10
+                  #:iterations 100
                   #:population-size 50
                   #:chromosome-length 30
                   #:gene-size 30

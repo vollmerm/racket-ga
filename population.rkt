@@ -5,7 +5,7 @@
 ; population.rkt
 ; Mike Vollmer, 2012
 ;
-; Tested in Racket 5.2.1 x84_64. It should work both in DrRacket and with Racket's optimizing compiler.
+; Tested in Racket 5.3.4 x84_64.
 ;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;
@@ -51,18 +51,19 @@
          #:report [report-function '()]
          #:maxmin [maxmin 1]
          #:range-size [range-size 1024.0]
-         #:range-offset [range-offset 512.0])
+         #:range-offset [range-offset 512.0]
+         #:criteria [criteria 0.05])
   
-  ; decode takes a bit string and decodes it into a floating point number
+  ; decode takes a bit string and decodes it into numbers (returns a list of flonums)
   (define (decode str)
     ; str is a vector
     (letrec ((sum-str (lambda (str i) (if (= i -1) 0
-                                          (+ (* (vector-ref str i) (expt 2.0 (- gene 1 i)))
+                                          (+ (* (vector-ref str i) (expt 2 (- gene 1 i)))
                                              (sum-str str (- i 1))))))
              (split-vectors (lambda (i) (if (= i 0) '()
                                             (cons (vector-copy str (- i gene) i)
                                                   (split-vectors (- i gene)))))))
-      (map (lambda (str) (sum-str str (- (vector-length str) 1))) (split-vectors (vector-length str)))))
+      (map (lambda (str) (->fl (sum-str str (- (vector-length str) 1)))) (split-vectors (vector-length str)))))
   
   (define (convrange raw)
     (map (lambda (i)
@@ -138,14 +139,15 @@
     ; s is size of population, l is string length
     ; returns a list of individuals generated randomly
     (if (= s 0) '()
-        (let ((str (random-flip-vector l)))
+        (let* ((str (random-flip-vector l))
+               (decoded (convrange (decode str))))
           ; I like to make sure the individual structure is always consistent
           ; even though the way the program works right now it isn't necessary.
           ; I could potentially save the computer some work and not calculate the
           ; fitness or the value until it's necessary, but I like to make sure 
           ; they're up-to-date by setting them every time I set the string.
           ; this is a place where I might go back and optimize if I need to
-          (cons (individual (convrange (decode str)) str (evaluate (convrange (decode str))))
+          (cons (individual decoded str (evaluate decoded))
                 (initialize-population-pool (- s 1) l)))))
   
   (define (get-best-individual pool)
@@ -179,9 +181,13 @@
                (parent2-string (individual-string parent2))
                (child1-string (combine-at parent1-string parent2-string site))
                (child2-string (combine-at parent2-string parent1-string site))
+               (decoded-child1 (convrange (decode child1-string)))
+               (decoded-child2 (convrange (decode child2-string)))
                ; value and fitness will be computed by mutate, so they probably don't need to be computed here
-               (child1 (individual (convrange (decode child1-string)) child1-string (evaluate (convrange (decode child1-string)))))
-               (child2 (individual (convrange (decode child2-string)) child2-string (evaluate (convrange (decode child2-string)))))
+               (child1 (individual decoded-child1
+                                   child1-string (evaluate decoded-child1)))
+               (child2 (individual decoded-child2 
+                                   child2-string (evaluate decoded-child2)))
                (updated-new-pool (append new-pool (list child1 child2))))
           (crossover-compute vector-pool updated-new-pool rest-of-selected))))
   
@@ -207,9 +213,13 @@
   (define (mutation pool)
     ; randomly mutate parts of a bit string
     (let ((mutate-individual (lambda (indv)
-                               (let ((str (vector-map (lambda (i) (if (= (flip mutation-rate) 1) (- 1 i) i))
-                                                      (individual-string indv))))
-                                 (individual (convrange (decode str)) (invert-gene str) (evaluate (convrange (decode str))))))))
+                               (let* ((str (vector-map (lambda (i) 
+                                                        (if (= (flip mutation-rate) 1) (- 1 i) i))
+                                                      (individual-string indv)))
+                                      (decoded (convrange (decode str))))
+                                 (individual decoded
+                                             (invert-gene str) 
+                                             (evaluate decoded))))))
       (map mutate-individual pool)))
   
   (define (step pool best i)
@@ -225,7 +235,9 @@
                    (gen-best (get-best-individual pool))
                    (best-individual (better-fit-individual best gen-best))
                    (new-pool (elite temp-pool best-individual)))
-              (step new-pool best-individual (- i 1))))))
+              (if (< (abs (individual-fitness best-individual)) criteria) 
+                  (population pool best)
+                  (step new-pool best-individual (- i 1)))))))
   
   (step pool best iterations))
 
@@ -270,7 +282,8 @@
          #:report [report-function '()]
          #:maxmin [maxmin 1]
          #:range-size [range-size 1024.0]
-         #:range-offset [range-offset 512.0])
+         #:range-offset [range-offset 512.0]
+         #:criteria [criteria 0.05])
   (letrec ((parallel-cycle 
             (lambda (i pop-list) (if (= i 0) pop-list
                                      (parallel-cycle (- i 1)
@@ -289,6 +302,7 @@
                                                                        #:report report-function
                                                                        #:maxmin maxmin
                                                                        #:range-size range-size
-                                                                       #:range-offset range-offset))
+                                                                       #:range-offset range-offset
+                                                                       #:criteria criteria))
                                                                     pop-list)))))))
     (parallel-cycle cycles (build-pop-list parallel-count))))
